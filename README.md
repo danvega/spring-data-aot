@@ -303,6 +303,95 @@ The application comes pre-loaded with:
 - **JUnit 5** - Test framework for AOT validation
 - **Maven** - Build tool with AOT plugin
 
+## Testing
+
+This project demonstrates two modern approaches to controller testing in Spring Boot 4.
+
+### MockMvcTester (AssertJ Style)
+
+See `CoffeeControllerTest` for this approach. MockMvcTester integrates with AssertJ for expressive assertions:
+
+```java
+@WebMvcTest(CoffeeController.class)
+class CoffeeControllerTest {
+
+    @Autowired
+    MockMvcTester mockMvcTester;
+
+    @MockitoBean
+    CoffeeRepository coffeeRepository;
+
+    @Test
+    void shouldReturnAllCoffees() {
+        when(coffeeRepository.findAll()).thenReturn(List.of(...));
+
+        assertThat(mockMvcTester.get().uri("/api/coffee"))
+            .hasStatusOk()
+            .bodyJson()
+            .extractingPath("$")
+            .asArray()
+            .hasSize(2);
+    }
+}
+```
+
+**Best for:** Teams already using AssertJ, preference for assertion-style testing.
+
+### RestTestClient (Unified API)
+
+See `OrderControllerTest` for this approach. RestTestClient is Spring Framework 7's unified REST testing API:
+
+```java
+@WebMvcTest(OrderController.class)
+class OrderControllerTest {
+
+    @Autowired
+    MockMvc mockMvc;
+
+    @MockitoBean
+    OrderRepository orderRepository;
+
+    RestTestClient client;
+
+    @BeforeEach
+    void setUp() {
+        client = RestTestClient.bindTo(mockMvc).build();
+    }
+
+    @Test
+    void shouldReturnAllOrders() {
+        when(orderRepository.findAll()).thenReturn(List.of(...));
+
+        client.get().uri("/api/orders")
+            .exchange()
+            .expectStatus().isOk()
+            .expectBody()
+            .jsonPath("$").isArray()
+            .jsonPath("$.length()").isEqualTo(1);
+    }
+}
+```
+
+**Best for:** Consistency across different testing scenarios. RestTestClient adapts to multiple contexts:
+
+| Binding Method | Use Case | Speed |
+|----------------|----------|-------|
+| `bindToController(controller)` | Unit test without Spring context | Fastest |
+| `bindTo(mockMvc)` | MVC slice test with validation/security | Fast |
+| `bindToApplicationContext(context)` | Full integration with real services | Slower |
+| `bindToServer()` | Real HTTP server for CORS/compression | Slowest |
+
+### Which Should You Choose?
+
+| Criteria | MockMvcTester | RestTestClient |
+|----------|---------------|----------------|
+| API style | AssertJ assertions | WebTestClient-style fluent |
+| Learning curve | Familiar to AssertJ users | New unified API |
+| Test type flexibility | MVC slice tests only | All test types |
+| Future direction | Stable | Spring's recommended path forward |
+
+For more details on RestTestClient, see [Spring Framework 7 RestTestClient](https://www.danvega.dev/blog/spring-framework-7-rest-test-client).
+
 ## The Value Proposition (Summary)
 
 | Feature | Traditional Spring Data | Spring Data AOT | AOT + Validation Test |
@@ -366,6 +455,7 @@ View your database in the browser at http://localhost:8080/h2-console
 
 ## Learning More
 
+- [Spring Data Ahead of Time Repositories - Part 2](https://spring.io/blog/2025/11/25/spring-data-ahead-of-time-repositories-part-2) - Official Spring blog post
 - [Spring Data AOT Documentation](https://docs.spring.io/spring-data/commons/reference/4.0/aot.html)
 - [GraalVM Native Image Guide](https://www.graalvm.org/latest/reference-manual/native-image/)
 - [Spring Boot 4.0 Release Notes](https://github.com/spring-projects/spring-boot/wiki/Spring-Boot-4.0-Release-Notes)
